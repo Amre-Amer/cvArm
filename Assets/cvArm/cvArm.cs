@@ -1,11 +1,13 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 public class cvArm : MonoBehaviour {
+    //
     GameObject[] segsTry;
     GameObject[] segsBest;
     GameObject[] segsReal;
+    GameObject[] segsHist;
     GameObject target;
     GameObject home;
     Vector3[] rotsTry;
@@ -13,6 +15,8 @@ public class cvArm : MonoBehaviour {
     Vector3[] rotsMin;
     Vector3[] rotsBest;
     Vector3[] rotsReal;
+    Vector3[,] rotsHist;
+    Vector3[] rotsHistLook;
     int numSegs = 7;
     float xSize = 1;
     float ySize = 3;
@@ -20,6 +24,7 @@ public class cvArm : MonoBehaviour {
     Vector3 rotCurrentTry;
     Vector3 rotCurrentBest;
     Vector3 rotCurrentReal;
+    Vector3 rotCurrentHist;
     int frameCount;
     float distBest;
     float distTry;
@@ -28,10 +33,12 @@ public class cvArm : MonoBehaviour {
     Vector3 posTargetLast;
     GameObject bestGo;
     GameObject realGo;
+    GameObject[] histGos;
     float range = 30;
     GameObject parentTry;
     GameObject parentBest;
-    GameObject parentBreadCrumbs;
+    GameObject parentHist;
+    GameObject parentReal;
     float speedTarget = 1f;
     public bool ynManual;
     public bool ynStep;
@@ -41,7 +48,13 @@ public class cvArm : MonoBehaviour {
     float restartRange = 10;
     GameObject bestDistGo;
     GameObject restartRangeGo;
+    GameObject histGo;
     float smooth = .95f;
+    int numHist = 100;
+    [Range(0, 100)]
+    public int lastHist;
+    int bestHist;
+    public bool ynHistory = true;
 
 	void Start () {
         initTarget();
@@ -110,15 +123,69 @@ public class cvArm : MonoBehaviour {
     }
 
     void updateLearning() {
-        updateRotTry();
-        updateSegsTry();
-        if (isRotTryBest() == true) {
-            bestCount++;
-            copyTryToBest(); 
-            updateSegsBest();
+        if (ynHistory == true)
+        {
+            updateRotTry();
+            updateSegsTry();
+            if (isRotTryBest() == true)
+            {
+                bestCount++;
+                copyTryToBest();
+                updateSegsBest();
+                addBestToHistory();
+                //updateSegsHist();
+            }
         }
         updateSegsReal();
-//        addBreadCrumb();
+        updateHistory();
+        updateSegsHist();
+    }
+
+    void updateHistory() {
+        float dBest = -1;
+        bestHist = -1;
+        for (int h = 0; h < lastHist; h++) {
+            float dist = Vector3.Distance(target.transform.position, histGos[h].transform.position);
+            if (dist < dBest || bestHist == -1) {
+                dBest = dist;
+                bestHist = h;
+            }
+        }
+//        if (bestHist > -1) {
+//            Debug.Log(bestHist);
+            //for (int s = 0; s < numSegs; s++)
+            //{
+            //    rotsHist[bestHist, s] = rotsBest[s];
+            //}
+//        }
+    }
+
+    void updateSegsHist()
+    {
+        if (bestHist == -1) return;
+        Debug.Log(bestHist + " / " + lastHist);
+        rotCurrentHist = Vector3.zero;
+        for (int s = 0; s < numSegs; s++)
+        {
+            rotsHistLook[s] = smooth * rotsHistLook[s] + (1 - smooth) * rotsHist[bestHist, s];
+//            rotsHistLook[s] = rotsHist[bestHist, s];
+            rotCurrentHist += rotsHistLook[s];
+            //rotCurrentHist += rotsHist[bestHist, s];
+            updateSeg(segsHist, s, rotCurrentHist);
+        }
+        histGo.transform.position = getFront(getLastSeg(segsHist));
+    }
+
+    void addBestToHistory() {
+        if (lastHist >= numHist) return;
+        for (int s = 0; s < numSegs; s++)
+        {
+            rotsHist[lastHist, s] = rotsBest[s];
+        }
+        histGos[lastHist].transform.position = getFront(getLastSeg(segsBest));
+        lastHist++;
+//       bestHist = lastHist;
+//        Debug.Log(lastHist);
     }
 
     bool isRotTryBest()
@@ -133,12 +200,17 @@ public class cvArm : MonoBehaviour {
         return yn;
     }
 
-    void addBreadCrumb() {
-        GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        go.transform.parent = parentBreadCrumbs.transform;
-        go.transform.localScale = new Vector3(1, 1, 1);
-        go.transform.position = getFront(getLastSeg(segsTry));
-        Destroy(go, 20);
+    void initHist() {
+        histGos = new GameObject[numHist];
+        for (int h = 0; h < numHist; h++)
+        {
+            GameObject go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            go.transform.parent = parentHist.transform;
+            go.transform.localScale = new Vector3(1, 1, 1);
+            //        go.transform.position = getFront(getLastSeg(segsTry));
+            go.transform.position = Vector3.zero;
+            histGos[h] = go;
+        }
     }
 
     void copyTryToBest() {
@@ -237,12 +309,16 @@ public class cvArm : MonoBehaviour {
         rotsMax = new Vector3[numSegs];
         rotsBest = new Vector3[numSegs];
         rotsReal = new Vector3[numSegs];
+        rotsHist = new Vector3[numHist, numSegs];
+        rotsHistLook = new Vector3[numSegs];
         segsTry = new GameObject[numSegs];
         segsBest = new GameObject[numSegs];
         segsReal = new GameObject[numSegs];
+        segsHist = new GameObject[numSegs];
         parentTry = new GameObject("parentTry");
         parentBest = new GameObject("parentBest");
-        parentBreadCrumbs = new GameObject("parentBreadCrumb");
+        parentHist = new GameObject("parentHist");
+        parentReal = new GameObject("parentReal");
         for (int s = 0; s < numSegs; s++)
         {
             GameObject seg = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -261,7 +337,7 @@ public class cvArm : MonoBehaviour {
             segBest.transform.position = new Vector3(0, 0, 0);
             segBest.transform.localScale = new Vector3(xSize, ySize, zSize);
             float cBest = (float)s / numSegs;
-            segBest.GetComponent<Renderer>().material.color = new Color(cBest, 1, cBest);
+            segBest.GetComponent<Renderer>().material.color = new Color(1, cBest, cBest);
             segBest.transform.parent = parentBest.transform;
             rotsBest[s] = Vector3.zero;
             segsBest[s] = segBest;
@@ -272,13 +348,23 @@ public class cvArm : MonoBehaviour {
             segReal.transform.position = new Vector3(0, 0, 0);
             segReal.transform.localScale = new Vector3(xSize, ySize, zSize);
             float cReal = (float)s / numSegs;
-            segReal.GetComponent<Renderer>().material.color = new Color(1, cReal, cReal);
-            segReal.transform.parent = parentBest.transform;
+            segReal.GetComponent<Renderer>().material.color = new Color(cReal, 1, cReal);
+            segReal.transform.parent = parentReal.transform;
             rotsReal[s] = Vector3.zero;
-            segsReal[s] = segBest;
+            segsReal[s] = segReal;
             segsReal[s].transform.eulerAngles = rotsReal[s];
+            //
+            GameObject segHist = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            segHist.name = "segHist " + s;
+            segHist.transform.position = new Vector3(0, 0, 0);
+            segHist.transform.localScale = new Vector3(xSize, ySize, zSize);
+            float cHist = (float)s / numSegs;
+            segHist.GetComponent<Renderer>().material.color = new Color(cHist, cHist, 1);
+            segHist.transform.parent = parentHist.transform;
+            segsHist[s] = segHist;
         }
         initHome();
+        initHist();
     }
 
     void initHome() {
@@ -326,8 +412,14 @@ public class cvArm : MonoBehaviour {
         realGo = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         realGo.name = "realGo";
         realGo.transform.localScale = new Vector3(3, 3, 3);
-        realGo.GetComponent<Renderer>().material.color = Color.cyan;
+        realGo.GetComponent<Renderer>().material.color = Color.green;
         realGo.transform.position = new Vector3(0, 0, 0);
+        //
+        histGo = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        histGo.name = "histGo";
+        histGo.transform.localScale = new Vector3(3, 3, 3);
+        histGo.GetComponent<Renderer>().material.color = Color.blue;
+        histGo.transform.position = new Vector3(0, 0, 0);
         //
         bestDistGo = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         bestDistGo.name = "bestDistGo";
