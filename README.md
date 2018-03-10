@@ -1,6 +1,6 @@
-# 3D Computer Vision Follow Greenest
+# 3D Forward Kinematic Machine Learn Random
 
-| `Unity 3D Machine Learning Starter`             |
+| `Unity 3D Forward Kinematic Machine Learning Starter`             |
 | ------------------------------------------------------------ |
 | ` `                                                          |
 | A basic Unity exercise to explore simple random rotation sets. ` |
